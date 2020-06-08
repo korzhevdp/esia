@@ -285,23 +285,30 @@ class Esiabridge extends CI_Controller {
 	* 
 	* @return string|false
 	*/
-	private function sendCallbackToClient($cSystemID, $backRequest) {
+
+	private function preSendCheck ($cSystemID) {
+		$connectedSystems = $this->config->item('CS');
 		if ( !$this->config->item('system_online') ){
 			$this->logmodel->addToLog( "System is now offline! Check config.\n" );
-			$this->logmodel->writeLog();
 			return false;
 		}
-		
-		//$urls    = $this->config->item('returnURLS');
-		$connectedSystems = $this->config->item('CS');
-		if (!isset($connectedSystems[$cSystemID])) {
+
+		if ( !isset($connectedSystems[$cSystemID]) ) {
 			$this->logmodel->addToLog( "No return URL found by specified index while sending callback. Check config.\n" );
+			return false;
+		}
+		return true;
+	}
+
+	private function sendCallbackToClient($cSystemID, $backRequest) {
+		if ( !$this->preSendCheck($cSystemID) ) {
 			$this->logmodel->writeLog();
 			return false;
 		}
 
-		$url     = $connectedSystems[$cSystemID]['returnURL'];
-		
+		$connectedSystems = $this->config->item('CS');
+		$url              = $connectedSystems[$cSystemID]['returnURL'];
+
 		$options = array(
 			'http' => array(
 				'content' => http_build_query($backRequest),
@@ -309,10 +316,8 @@ class Esiabridge extends CI_Controller {
 				'method'  => 'POST'
 			)
 		);
-		$context = stream_context_create($options);
-		$result  = file_get_contents($url, false, $context);
-
-		//var_dump($http_response_header);
+		$context  = stream_context_create($options);
+		$result   = file_get_contents($url, false, $context);
 		$location = false;
 		foreach ( $http_response_header as $header ) {
 			if ( preg_match("/Location:(.*)/i", $header, $matches) ) {
