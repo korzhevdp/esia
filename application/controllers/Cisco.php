@@ -20,10 +20,10 @@ class Cisco extends CI_Controller {
 	}
 
 	public function trap() {
-		$ticket = $this->getUUID();
-		$data = $_GET;
+		$ticket          = $this->getUUID();
+		$data            = $_GET;
 		$data['profile'] = "cisco";
-		$options = array(
+		$options         = array(
 			'http' => array(
 				'content' => http_build_query(
 					array(
@@ -38,7 +38,7 @@ class Cisco extends CI_Controller {
 		//print json_encode($data);
 		//return false;
 		$context = stream_context_create($options);
-		$this->load->view("cisco/cisco", array("link" => file_get_contents("http://esia.arhcity.ru/esiabridge/processticket", false, $context)));
+		$this->load->view("cisco/cisco", array("link" => file_get_contents("https://auth.arhcity.ru/esiabridge/processticket", false, $context)));
 	}
 
 	public function finalize($EsiaID, $objectID) {
@@ -80,7 +80,7 @@ class Cisco extends CI_Controller {
 		$insurgent = '<script type="text/javascript">
 		document.forms[0].username.value      = "esiayes";
 		document.forms[0].password.value      = "Uslugi170817";
-		document.forms[0].redirect_url.value  = "http://www.arhcity.ru";
+		document.forms[0].redirect_url.value  = "https://www.arhcity.ru";
 		document.forms[0].buttonClicked.value = 4;
 		document.forms[0].submit();
 		</script></body>';

@@ -2,11 +2,11 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Esiabridge extends CI_Controller {
-	/* Многие пожелания добра:
+	/* Многие пожелания добра [Many best wishes to]:
 	*  https://github.com/fr05t1k/esia/blob/master/src/OpenId.php
 	*  https://habrahabr.ru/post/276313/
 	*
-	*  DO: correct a signature check
+	*  DO: correct a signature check... 08.06.2020 Still yet to do :(
 	*/
 
 	function __construct() {
@@ -15,25 +15,6 @@ class Esiabridge extends CI_Controller {
 		$this->load->model("verifymodel");
 		$this->load->model("userdatamodel");
 	}
-
-	public $dataProfile = array(
-		'openid'     => array("scopes" => array('openid'),								"requests" => array('openid')),
-		'cisco'      => array("scopes" => array('openid'),								"requests" => array('openid')),
-		'contacts'   => array("scopes" => array('contacts'),							"requests" => array('contacts')),
-		'fullname'   => array("scopes" => array('fullname'),							"requests" => array('fullname')),
-		'birthplace' => array("scopes" => array('birthplace'),							"requests" => array('birthplace')),
-		'address'    => array("scopes" => array('birthplace', 'contacts'),				"requests" => array('birthplace', 'address')),
-		'fulldata'   => array("scopes" => array('birthplace', 'contacts', 'fullname'),	"requests" => array('birthplace', 'address', 'contacts', 'fullname'))
-	);
-
-	public $rTokens = array(
-		'cisco'      => 'openid',
-		'openid'     => 'openid',
-		'contacts'   => 'contacts',
-		'address'    => 'contacts',
-		'fullname'   => 'fullname',
-		'birthplace' => 'birthplace',
-	);
 
 	public $oid          = null;
 	public $tlog         = null;
@@ -193,41 +174,24 @@ class Esiabridge extends CI_Controller {
 	*/
 	private function requestAuthCode($cSystemID = 0, $objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
 		// Извлечение конфигурации запроса к ЕСИА и критериев фильтрации
-		//$file = $this->config->item("base_server_path")."tickets/".$objectID;
-		$connectedSystems = $this->config->item('CS');
+		$connectedSystems   = $this->config->item('CS');
 		$this->logmodel->addToLog( "AuthCode request by ".$cSystemID.".\n" );
 		if (!isset($connectedSystems[$cSystemID])) {
 			$this->logmodel->addToLog( "No return URL found by specified index while initializing AuthCodeRequest. Check config.\n" );
 			$this->logmodel->writeLog("esia_authcode.log");
 			return false;
 		}
-		/*
-		if ( !file_exists($file) ) {
-			$this->logmodel->addToLog("No valid config file supplied\n");
-			$this->logmodel->writeLog("esia_authcode.log");
-		}
-
-		$config      = json_decode(file_get_contents($file));
-		if ( !isset($this->dataProfile[$config->profile]) ) {
-			$this->logmodel->addToLog("Profile is unknown\n");
-			$this->logmodel->writeLog("esia_authcode.log");
-			print "Error while getting authorization code";
-			return false;
-		}
-		*/
-		$this->scope = implode($connectedSystems[$cSystemID]['scopes'], " ");
+		$this->scope        = implode($connectedSystems[$cSystemID]['scopes'], " ");
 		$this->logmodel->addToLog( "AuthCode request by ".$cSystemID." scopes: ".$this->scope." ".print_r($connectedSystems[$cSystemID]['scopes'], true).".\n" );
 		// (Методические рекомендации по использованию ЕСИА v 2.23, В.6.2.1 Стандартный режим запроса авторизационного кода)
-		$timestamp   = date('Y.m.d H:i:s O');
-		$this->state = $this->getState();
-		$returnURL   = $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$cSystemID.'/'.$objectID;
-		$secret      = $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
-		$requestParams = array(
+		$timestamp          = date('Y.m.d H:i:s O');
+		$this->state        = $this->getState();
+		$requestParams      = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),
 			'cid'			=> $this->config->item("IS_MNEMONICS"),
 			'rurl'			=> "http://auth.arhcity.ru/redirect",
-			'client_secret'	=> $secret,
-			'redirect_uri'	=> $returnURL,
+			'client_secret'	=> $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state),
+			'redirect_uri'	=> $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$cSystemID.'/'.$objectID,
 			'scope'			=> $this->scope,
 			'response_type'	=> 'code',
 			'state'			=> $this->state,
@@ -235,8 +199,8 @@ class Esiabridge extends CI_Controller {
 			'access_type'	=> 'online'
 		);
 		$options = array(
-			'url'        => $this->userdatamodel->getURL('code'),
-			'get_params' => http_build_query($requestParams)
+			'url'           => $this->userdatamodel->getURL('code'),
+			'get_params'    => http_build_query($requestParams)
 		);
 		$this->logmodel->addToLog("Параметры запроса:\n".print_r($requestParams, true)."\n");
 		$this->logmodel->addToLog("Содержимое ссылки на получение кода от ".$timestamp.":\n\"".$options['get_params']."\n");
@@ -365,20 +329,14 @@ class Esiabridge extends CI_Controller {
 
 	/* MAIN SECTION GETTER*/
 
-	/**
-	* redirection
-	*/
 	public function index () {
 		header("Location: https://www.arhcity.ru");
-		//print "No more..";
-
 		return false;
-		//print '<a href="'.$this->requestAuthCode().'">Вход через ЕСИА</a>';
 	}
 
-	private function checkClientSystem(){
-		$urls = $this->config->item('returnURLS');
-		if ( isset($urls[$this->input->post("systemID")]) ) {
+	private function checkClientSystem() {
+		$connectedSystems = $this->config->item('CS');
+		if ( isset($connectedSystems[$this->input->post("systemID")]) ) {
 			return true;
 		}
 		$this->logmodel->addToLog("System ID: ".$this->input->post("systemID")." not found\n");
@@ -389,7 +347,7 @@ class Esiabridge extends CI_Controller {
 	private function writeTicket($data) {
 		$ticketPath = $this->config->item("base_server_path")."tickets/".$this->input->post("ticket");
 		if ( file_put_contents($ticketPath, json_encode($data)) === FALSE ) {
-			$this->logmodel->addToLog("A ticket file could not be written\n");
+			$this->logmodel->addToLog("A ticket file could not be written. Possibly, bad data or directiry is RO\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
@@ -407,35 +365,22 @@ class Esiabridge extends CI_Controller {
 	}
 
 	public function processticket() {
-		//print_r($this->input->post());
-		if (   !$this->input->post("ticket")
-			|| !$this->input->post("data")
-			|| !$this->input->post("systemID")
-			|| !strlen($this->input->post("ticket"))
-			|| !strlen($this->input->post("data"))
-			|| !strlen($this->input->post("systemID"))
-			) {
+		if (   !$this->input->post("ticket")         || !$this->input->post("data")         || !$this->input->post("systemID")
+			|| !strlen($this->input->post("ticket")) || !strlen($this->input->post("data")) || !strlen($this->input->post("systemID"))
+		) {
 			$this->logmodel->addToLog("At least one of an essential fields: POST['data'] or POST['ticket'] or POST['systemID'] is missing or empty\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-		
 		$this->logmodel->addToLog("Fields OK. Processing...\n");
 
 		if ( !$this->checkClientSystem() ) {
-			$this->logmodel->addToLog("Unknown client system\n");
-			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-		
 		$ticketData = $this->parseTicketData();
-
 		if ( !$ticketData || !$this->writeTicket($ticketData) ) {
-			$this->logmodel->addToLog("Unknown ticket Data\n");
-			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-
 		$this->logmodel->addToLog("A ticket was processed succesfully\n");
 		print $this->requestAuthCode( $this->input->post("systemID"), $this->input->post("ticket"));
 		$this->logmodel->addToLog("Request Auth Code has passed\n");
