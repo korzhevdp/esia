@@ -244,8 +244,9 @@ class Esiabridge extends CI_Controller {
 	* 
 	* @return true|false
 	*/
-	private function setTokens($scopes) {
+	private function setToken($scopes) {
 		/* retrieving access token */
+		// досточно получить 1 токен. В нём уже прописаны все scopes взятые из авторизационного кода.
 		$result = $this->getESIAToken( $scopes[0] );
 		$this->logmodel->addToLog("Request was sent successfully. Server returned:\n".print_r($result, true));
 		$this->accessToken = $result->access_token;
@@ -258,26 +259,6 @@ class Esiabridge extends CI_Controller {
 			return true;
 		}
 		return false;
-
-		/*
-		foreach ($scopes as $scope) {
-			$this->logmodel->addToLog( "--------------------------------------------\nSetting token for scope: ".$scope."\n" );
-			$this->{"token_".$scope}         = $this->getESIAToken( $scope );
-			if ( $this->{"token_".$scope} === FALSE ) {
-				continue;
-			}
-			$this->{"token_".$scope."_data"} = $this->parseToken($this->{"token_".$scope}->access_token);
-			
-			$this->logmodel->addToLog( "Token for scope: ".$scope." was set\n" );
-			
-			if ( $this->{"token_".$scope."_data"} === FALSE || !$this->verifymodel->verifyToken($this->{"token_".$scope."_data"}) ) {
-				$this->logmodel->addToLog( "Token ".$scope." could not pass verification\n" );
-				continue;
-			}
-			$this->logmodel->addToLog( "Token for scope: ".$scope." processed\n--------------------------------------------\n\n\n" );
-		}
-		
-		*/
 	}
 
 	/**
@@ -445,19 +426,49 @@ class Esiabridge extends CI_Controller {
 	* @param $objectID int
 	* @return true|false
 	*/
-	public function token($state = "", $cSystemID = 0, $objectID = 0 ) {
-		$urls = $this->config->item("returnURLS");
+	
+	private function tokenCheckResult() {
+		$connectedSystems = $this->config->item("CS");
 		if ( !$this->verifymodel->verifyState($state) || $this->userDeniedAccess($cSystemID, $objectID) ) {
 			$this->load->helper("url");
-			redirect(strstr($urls[$cSystemID],"&",TRUE));
+			redirect(strstr($connectedSystems[$cSystemID]['returnURL'],"&",TRUE));
+			return false;
+		}
+		return true
+	}
+
+	private function processUserdata($config, $objectID) {
+		/* performing all requests */
+		foreach ($config["requests"] as $request) {
+			$this->userdatamodel->requestUserData($this->accessToken, $request);
+		}
+		$userdata     = $this->newUserDataObject();
+		$this->logmodel->addToLog( "\n------------------\nUSER DATA SET:\n".print_r($userdata, true)."\n" );
+		$sendData     = array();
+		if ($config['profile'] === "fullname") {
+			$sendData = $userdata['fullname'];
+		}
+		if ($config['profile'] === "fulldata") {
+			$sendData = $userdata;
+		}
+		$backRequest  = array(
+			'oid'     => $userdata['oid'],
+			'ticket'  => $objectID,
+			'data'    => json_encode($sendData),
+			'valid'   => $this->userdatamodel->processUserMatching($userdata, $objectID, $config['profile']),
+			'trusted' => $userdata['trusted']
+		);
+		$this->sendCallbackToClient($cSystemID, $backRequest);
+		return true;
+	}
+
+	public function token($state = "", $cSystemID = 0, $objectID = 0 ) {
+		if ( !$this->tokenCheckResult() ) {
 			return false;
 		}
 
 		if ( strlen($this->input->get('code')) ) {
-
 			$connectedSystems = $this->config->item('CS');
-
-			//$ticketFile = $this->config->item("base_server_path")."tickets/".$objectID;
 			if (!isset($connectedSystems[$cSystemID])) {
 				$this->logmodel->addToLog( "\nClient System not found in config!\n" );
 				return false;
@@ -466,56 +477,22 @@ class Esiabridge extends CI_Controller {
 			$config = $connectedSystems[$cSystemID];
 			$this->load->helper('url');
 
-			if ( $this->setTokens($config['scopes']) ) {
-				// досточно получить 1 токен. В нём уже прописаны все scopes взятые из авторизационного кода.
-
-				foreach ($config["requests"] as $request) {
-					$this->userdatamodel->requestUserData($this->accessToken, $request);
-				}
-
-				$userdata = $this->newUserDataObject();
-				$this->logmodel->addToLog( "\n------------------\nUSER DATA SET:\n".print_r($userdata, true)."\n" );
-				$sendData = array();
-				if ($config['profile'] === "fullname") {
-					$sendData = $userdata['fullname'];
-				}
-				if ($config['profile'] === "fulldata") {
-					$sendData = $userdata;
-				}
-				$backRequest = array(
-					'oid'      => $userdata['oid'],
-					'ticket'   => $objectID,
-					'data'     => json_encode($sendData),
-					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID, $config['profile']),
-					'trusted'  => $userdata['trusted']
-				);
-				//print_r($userdata);
-				//print "<br><br>";
-				//print_r($backRequest);
-
-				$result      = $this->sendCallbackToClient($cSystemID, $backRequest);
-
+			if ( $this->setToken($config['scopes']) ) {
+				$this->processUserdata($config, $objectID);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 				$this->logmodel->writeLog();
-				//var_dump($result);
-			} else {
-				$this->logmodel->addToLog( "\nIT WAS UNABLE TO COLLECT ALL THE TOKENS!\n" );
-				$this->logmodel->writeLog();
-			}
 
-			if ($config['profile'] === "cisco") {
-				redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$objectID);
+				if ($config['profile'] === "cisco") {
+					redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$objectID);
+					return true;
+				}
+				redirect($connectedSystems[$cSystemID]['returnURL']);
 				return true;
 			}
-			/*
-			if ( file_exists($ticketFile) ) {
-				unlink($ticketFile);
-			}
-			*/
-			redirect($connectedSystems[$cSystemID]['returnURL']);
-			return true;
+
+			$this->logmodel->addToLog( "\nIT WAS UNABLE TO GET EVEN A SINGLE TOKEN!\n" );
+			$this->logmodel->writeLog();
 		}
-		$this->logmodel->addToLog( "\nUNABLE TO COLLECT REQUIRED ACCESS TOKENS!\n" );
 		$this->logmodel->addToLog( "Authorization Code was not provided" );
 		$this->logmodel->writeLog();
 		return false;
