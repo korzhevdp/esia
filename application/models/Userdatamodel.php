@@ -206,6 +206,19 @@ class Userdatamodel extends CI_Model {
 		return $valid;
 	}
 
+	private function checkHouses($userdata, $houses) {
+		// если список домов пустой, то подходит любой дом / улица целиком 
+		if ( !is_array($houses) || !sizeof($houses) ) { 
+			return 1;
+		}
+		// если список есть и дом входит в список домов на улице 
+		if (   in_array( $userdata['prg']["house"], $houses ) 
+			|| in_array( $userdata['plv']["house"], $houses ) ) {
+			return 1;
+		}
+		return false;
+	}
+
 	private function checkStreet($userdata, $pattern) {
 		foreach ( $pattern->city as $streets ) {
 			// если список улиц пустой, то подходит любая улица / город целиком 
@@ -216,15 +229,8 @@ class Userdatamodel extends CI_Model {
 			foreach ($streets as $street => $houses) {
 				if (   $street === $userdata['prg']["street"] 
 					|| $street === $userdata['plv']["street"] ) {
-					// если список домов пустой, то подходит любой дом / улица целиком 
-					if ( !is_array($houses) || !sizeof($houses) ) { 
-						return 1;
-					}
-
-					// если список есть и дом входит в список домов на улице 
-					if (   in_array( $userdata['prg']["house"], $houses ) 
-						|| in_array( $userdata['plv']["house"], $houses ) ) {
-						return 1;
+					if ( !$this-checkHouses() ) {
+						continue;
 					}
 				}
 			}
@@ -232,15 +238,16 @@ class Userdatamodel extends CI_Model {
 		}
 	}
 
-	public function processUserMatching($userdata, $objectID, $profile) {
-		if ( $profile !== "address" ) {
-			return 1;
-		}
-		$pattern = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID));
-		$pattern = $pattern->matchParams;
+	public function processUserMatching($userdata, $ticketID, $profile) {
 		$valid = 1;
+		if ( $profile !== "address" ) {
+			return $valid;
+		}
+		$pattern = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$ticketID));
+		$pattern = $pattern->matchParams;
+
 		if ( !isset($pattern->region) ) {
-			return 1;
+			return $valid;
 		}
 		if ( isset($pattern->region) ) {
 			$valid = $this->checkRegion($userdata, $pattern);
