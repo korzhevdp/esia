@@ -37,7 +37,7 @@ class Userdatamodel extends CI_Model {
 	*/
 	public function getURL($urlType='name') {
 		$urls = array(
-			//'inn'        => 
+			'inn'        => 'rs/prns/'.$this->oid,
 			'code'       => 'aas/oauth2/ac?',
 			'token'      => 'aas/oauth2/te',
 			'fullname'   => 'rs/prns/'.$this->oid,
@@ -76,6 +76,8 @@ class Userdatamodel extends CI_Model {
 		if ($mode === 'fullname') {
 			$this->fullname = implode( array($result->lastName, $result->firstName, $result->middleName), " " );
 		}
+
+		$this->inn = ( isset($result->inn) ) ? $result->inn : "";
 
 		if ( isset( $result->trusted ) ) {
 			$this->trusted = ($result->trusted) ? 1 : 0;

@@ -401,6 +401,7 @@ class Esiabridge extends CI_Controller {
 			'birthplace'	=> $this->userdatamodel->birthplace,
 			'cellphone'		=> $this->userdatamodel->cellPhone,
 			'email'			=> $this->userdatamodel->email,
+			'inn'			=> $this->userdatamodel->inn,
 			'prg'			=> array(
 				'region'	=> $this->userdatamodel->regRegion,
 				'city'		=> $this->userdatamodel->regCity,
