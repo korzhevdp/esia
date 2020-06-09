@@ -209,20 +209,26 @@ class Userdatamodel extends CI_Model {
 	private function checkStreet($userdata, $pattern) {
 		foreach ( $pattern->city as $streets ) {
 			// если список улиц пустой, то подходит любая улица / город целиком 
-			if ( !sizeof($streets) ) { return 1; }
+			if ( !sizeof($streets) ) { 
+				return 1;
+			}
 
 			foreach ($streets as $street => $houses) {
-				if ( sizeof($streets) && $street === $userdata['prg']["street"] || $street === $userdata['plv']["street"] ) {
-					// если список домов пустой, то подходит любая дом / улица целиком 
-					if ( !sizeof($houses) ) { return 1; }
-
-					// если дом входит в список домов на улице 
-					if ( is_array($houses) && sizeof($houses) && ( in_array( $userdata['prg']["house"], $houses) || in_array($userdata['plv']["house"], $houses ) )) {
+				if (   $street === $userdata['prg']["street"] 
+					|| $street === $userdata['plv']["street"] ) {
+					// если список домов пустой, то подходит любой дом / улица целиком 
+					if ( !is_array($houses) || !sizeof($houses) ) { 
 						return 1;
 					}
-					return 0;
+
+					// если список есть и дом входит в список домов на улице 
+					if (   in_array( $userdata['prg']["house"], $houses ) 
+						|| in_array( $userdata['plv']["house"], $houses ) ) {
+						return 1;
+					}
 				}
 			}
+			return 0;
 		}
 	}
 
