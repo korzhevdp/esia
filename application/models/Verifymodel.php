@@ -86,24 +86,20 @@ class Verifymodel extends CI_Model {
 	* @param $accessToken array
 	* @return true|false
 	*/
-	private function verifySignature($accessToken) { // correct this later
+	private function verifySignature($accessToken) {
 		/*
 		$algs = array(
-			'RS256' => 'sha256'
+			'GOST3410_2012_256' => 'md_gost12_256',
+			'RS256'				=> 'sha256'
 		);
-		//$path =$this->config->item("base_server_path").'tickets';
-		//$certpath = $this->config->item("cert_path");
-		//file_put_contents($path.'signature', $accessToken['signature']);
-		//file_put_contents($path.'hashpart',  $accessToken['hashpart']);
-
-		//$command = "openssl dgst -sha256 -verify ".$path."esia2.pem -signature ".$path."signature ".$path."hashpart";
-		//$result  = exec($command);
-		//$this->logmodel->addToLog( "SIGNATURE CHECK COMMAND:\n ".$command."\nRESULT: ".$result."\n------------------\n" );
-
-		/*
-		* sorry, but we stop here for now...
 		*/
-		return true;
+		$path =$this->config->item("base_server_path").'tickets/';
+		exec("openssl dgst -engine gost -verify ".$path."gost.pem -signature ".$path."signature ".$path."hashpart", $result);
+		$this->logmodel->addToLog( "SIGNATURE CHECK: ".$result[0].". ".$result[1]."\n" );
+		if ( $result[0] == "Verified OK" || $result[1] == "Verified OK" ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**

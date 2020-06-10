@@ -8,16 +8,19 @@ class Test extends CI_Controller {
 	}
 
 	public function index() {
-		//phpinfo();
-		//exit;
-		
-		$path				= $this->config->item("base_server_path").'application/views/esia/';
-		$signFile			= $path.'signed'.uniqid(true).'.msg';
-		$messageFile		= $path.'message'.uniqid(true).'.msg';
+		print 'test routine<br><br><br>';
 
-		file_put_contents($messageFile, "1111111");
+		$path = $this->config->item("base_server_path").'tickets/';
 
-		shell_exec("openssl cms -sign -signer ".$this->config->item("cert_path")."auth.key -inkey ".$this->config->item("cert_path")."auth.key -binary -in ".$path."msg -outform pem -out ".$path."signature3");
+		//exec("openssl dgst -verify ".$path."gost.pem -signature ".$path."signature ".$path."hashpart", $err);
+
+		print "openssl dgst -md_gost12_256 -sign   ".$path."auth.key -out ".$path."in.txt.2012 ".$path."in.txt<br>";
+		print "openssl dgst -md_gost12_256 -verify ".$path."auth.key -signature ".$path."in.txt.2012 ".$path."in.txt";
+
+		//exec("openssl dgst -md_gost12_256 -sign   ".$path."auth.key -out ".$path."in.txt.2012 ".$path."in.txt");
+		//exec("openssl dgst -md_gost12_256 -verify ".$path."auth.key -signature ".$path."in.txt.2012 ".$path."in.txt");
+
+		//print str_replace(" ", "&nbsp;", str_replace("\n", "<br>", print_r($err, true)));
 	}
 
 }

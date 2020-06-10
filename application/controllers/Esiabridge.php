@@ -122,7 +122,7 @@ class Esiabridge extends CI_Controller {
 			$output = array(
 				'header'    => json_decode($this->base64UrlSafeDecode($chunks[0])),
 				'payload'   => json_decode($this->base64UrlSafeDecode($chunks[1])),
-				'signature' => $chunks[2],
+				'signature' => $this->base64UrlSafeDecode($chunks[2]),
 				'hashpart'  => $chunks[0].".".$chunks[1],
 			);
 			if (file_put_contents($this->config->item("base_server_path").'tickets/signature', $output['signature'])) {
@@ -132,7 +132,6 @@ class Esiabridge extends CI_Controller {
 			if (file_put_contents($this->config->item("base_server_path").'tickets/hashpart',  $output['hashpart'])) {
 				$this->logmodel->addToLog("Hashpart has been written to file\n");
 			}
-
 			$this->oid = $output['oid'] = ( isset($output['payload']->{"urn:esia:sbj_id"}) ) ? $output['payload']->{"urn:esia:sbj_id"} : 0;
 			return $output;
 		}
@@ -253,10 +252,12 @@ class Esiabridge extends CI_Controller {
 		$this->logmodel->addToLog('$this->accessToken set:'."\n------------------\n".print_r($this->accessToken, true)."\n------------------\n");
 		/* for checks */
 		$parsedToken = $this->parseToken($this->accessToken);
-		$this->logmodel->addToLog("------------------ Parsed Access Token ------------------\n".print_r($parsedToken, true)."\n------------------\n\n\n\n");
-
+		
+		$this->logmodel->addToLog("------------------ Parsed Access Token ------------------\n".print_r($parsedToken, true)."\n------------------\n\n");
 		if ($this->accessToken) {
-			return true;
+			if ($this->verifymodel->verifyToken($parsedToken)) {
+				return true;
+			}
 		}
 		return false;
 	}
@@ -269,13 +270,14 @@ class Esiabridge extends CI_Controller {
 
 	private function preSendCheck ($cSystemID) {
 		$connectedSystems = $this->config->item('CS');
+
 		if ( !$this->config->item('system_online') ){
 			$this->logmodel->addToLog( "System is now offline! Check config.\n" );
 			return false;
 		}
 
 		if ( !isset($connectedSystems[$cSystemID]) ) {
-			$this->logmodel->addToLog( "No return URL found by specified index while sending callback. Check config.\n" );
+			$this->logmodel->addToLog( "No return URL found by specified index while sending callback: ".$cSystemID.". Check config.\n" );
 			return false;
 		}
 		return true;
@@ -299,6 +301,7 @@ class Esiabridge extends CI_Controller {
 		);
 		$context  = stream_context_create($options);
 		$result   = file_get_contents($url, false, $context);
+		$this->logmodel->addToLog( "POST data request to: ".$url."\n".print_r($options, true)."\n\n Have data fun!\n" );
 		$location = false;
 		foreach ( $http_response_header as $header ) {
 			if ( preg_match("/Location:(.*)/i", $header, $matches) ) {
@@ -310,6 +313,7 @@ class Esiabridge extends CI_Controller {
 			$this->logmodel->writeLog();
 			return false;
 		}
+		$this->logmodel->addToLog( "Sending callback request to ".$url." :: ".$location.". Have fun!\n" );
 		return $location;
 	}
 
@@ -427,17 +431,17 @@ class Esiabridge extends CI_Controller {
 	* @return true|false
 	*/
 	
-	private function tokenCheckResult() {
+	private function tokenCheckResult($state, $cSystemID, $objectID) {
 		$connectedSystems = $this->config->item("CS");
 		if ( !$this->verifymodel->verifyState($state) || $this->userDeniedAccess($cSystemID, $objectID) ) {
 			$this->load->helper("url");
 			redirect(strstr($connectedSystems[$cSystemID]['returnURL'],"&",TRUE));
 			return false;
 		}
-		return true
+		return true;
 	}
 
-	private function processUserdata($config, $objectID) {
+	private function processUserdata($config, $cSystemID, $objectID) {
 		/* performing all requests */
 		foreach ($config["requests"] as $request) {
 			$this->userdatamodel->requestUserData($this->accessToken, $request);
@@ -463,7 +467,7 @@ class Esiabridge extends CI_Controller {
 	}
 
 	public function token($state = "", $cSystemID = 0, $objectID = 0 ) {
-		if ( !$this->tokenCheckResult() ) {
+		if ( !$this->tokenCheckResult($state, $cSystemID, $objectID) ) {
 			return false;
 		}
 
@@ -478,7 +482,7 @@ class Esiabridge extends CI_Controller {
 			$this->load->helper('url');
 
 			if ( $this->setToken($config['scopes']) ) {
-				$this->processUserdata($config, $objectID);
+				$this->processUserdata($config, $cSystemID, $objectID);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 				$this->logmodel->writeLog();
 
@@ -486,7 +490,6 @@ class Esiabridge extends CI_Controller {
 					redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$objectID);
 					return true;
 				}
-				redirect($connectedSystems[$cSystemID]['returnURL']);
 				return true;
 			}
 
@@ -495,6 +498,7 @@ class Esiabridge extends CI_Controller {
 		}
 		$this->logmodel->addToLog( "Authorization Code was not provided" );
 		$this->logmodel->writeLog();
+		redirect($connectedSystems[$cSystemID]['returnURL']);
 		return false;
 	}
 }
