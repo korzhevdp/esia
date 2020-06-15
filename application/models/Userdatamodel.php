@@ -8,7 +8,7 @@ class Userdatamodel extends CI_Model {
 	}
 
 
-	public $fullname       = null;
+	public $fullname      = null;
 	public $regRegion     = null;
 	public $regCity       = null;
 	public $regStreet     = null;
@@ -23,10 +23,11 @@ class Userdatamodel extends CI_Model {
 	public $plvFrame      = null;
 	public $plvFlat       = null;
 	public $plvFias       = null;
-	public $birthplace     = null;
-	public $email          = null;
-	public $cellPhone      = null;
-	public $trusted        = null;
+	public $birthplace    = null;
+	public $email         = null;
+	public $cellPhone     = null;
+	public $trusted       = null;
+	public $inn       = null;
 
 	/*  URL Retrieve  */
 
@@ -77,7 +78,7 @@ class Userdatamodel extends CI_Model {
 			$this->fullname = implode( array($result->lastName, $result->firstName, $result->middleName), " " );
 		}
 
-		$this->inn = ( isset($result->inn) ) ? $result->inn : "";
+		$this->inn = ( isset($result->inn) ) ? $result->inn : null;
 
 		if ( isset( $result->trusted ) ) {
 			$this->trusted = ($result->trusted) ? 1 : 0;
@@ -157,10 +158,10 @@ class Userdatamodel extends CI_Model {
 			$this->setPLVDataset($result);
 		}
 		if ($result->type === "EML") {
-			$this->email   = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
+			$this->email     = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
 		}
 		if ($result->type === "MBT") {
-			$this->cellPhone  = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
+			$this->cellPhone = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
 		}
 	}
 

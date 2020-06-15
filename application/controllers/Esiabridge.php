@@ -188,7 +188,7 @@ class Esiabridge extends CI_Controller {
 		$requestParams      = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),
 			'cid'			=> $this->config->item("IS_MNEMONICS"),
-			'rurl'			=> "http://auth.arhcity.ru/redirect",
+			'rurl'			=> $connectedSystems[$cSystemID]['returnURL'],
 			'client_secret'	=> $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state),
 			'redirect_uri'	=> $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$cSystemID.'/'.$objectID,
 			'scope'			=> $this->scope,
@@ -301,20 +301,23 @@ class Esiabridge extends CI_Controller {
 		);
 		$context  = stream_context_create($options);
 		$result   = file_get_contents($url, false, $context);
-		$this->logmodel->addToLog( "POST data request to: ".$url."\n".print_r($options, true)."\n\n Have data fun!\n" );
+		$this->logmodel->addToLog( "POST data request to: ".$url."\n".print_r($options, true)."\nHave data fun!\n" );
+		
+		/*
 		$location = false;
 		foreach ( $http_response_header as $header ) {
 			if ( preg_match("/Location:(.*)/i", $header, $matches) ) {
 				$location = trim($matches[1]);
 			}
 		}
+		*/
 		if ($result === FALSE) {
 			$this->logmodel->addToLog( "Callback request to ".$url." failed! Check config.\n" );
 			$this->logmodel->writeLog();
 			return false;
 		}
-		$this->logmodel->addToLog( "Sending callback request to ".$url." :: ".$location.". Have fun!\n" );
-		return $location;
+		//$this->logmodel->addToLog( "Sending callback request to ".$url." :: ".$location.". Have fun!\n" );
+		return true;
 	}
 
 	/* MAIN SECTION GETTER*/
@@ -443,6 +446,7 @@ class Esiabridge extends CI_Controller {
 
 	private function processUserdata($config, $cSystemID, $objectID) {
 		/* performing all requests */
+
 		foreach ($config["requests"] as $request) {
 			$this->userdatamodel->requestUserData($this->accessToken, $request);
 		}
@@ -455,15 +459,15 @@ class Esiabridge extends CI_Controller {
 		if ($config['profile'] === "fulldata") {
 			$sendData = $userdata;
 		}
-		$backRequest  = array(
+		return array(
 			'oid'     => $userdata['oid'],
 			'ticket'  => $objectID,
 			'data'    => json_encode($sendData),
 			'valid'   => $this->userdatamodel->processUserMatching($userdata, $objectID, $config['profile']),
 			'trusted' => $userdata['trusted']
 		);
-		$this->sendCallbackToClient($cSystemID, $backRequest);
-		return true;
+		
+		//return true;
 	}
 
 	public function token($state = "", $cSystemID = 0, $objectID = 0 ) {
@@ -482,15 +486,18 @@ class Esiabridge extends CI_Controller {
 			$this->load->helper('url');
 
 			if ( $this->setToken($config['scopes']) ) {
-				$this->processUserdata($config, $cSystemID, $objectID);
-				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
-				$this->logmodel->writeLog();
+				$backRequest = $this->processUserdata($config, $cSystemID, $objectID);
+				if ($backRequest) {
+					$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
+					$this->logmodel->writeLog();
+				}
 
 				if ($config['profile'] === "cisco") {
 					redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$objectID);
 					return true;
 				}
-				return true;
+				$this->sendCallbackToClient($cSystemID, $backRequest);
+				redirect($connectedSystems[$cSystemID]['returnURL']);
 			}
 
 			$this->logmodel->addToLog( "\nIT WAS UNABLE TO GET EVEN A SINGLE TOKEN!\n" );

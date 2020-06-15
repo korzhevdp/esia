@@ -95,8 +95,8 @@ class Verifymodel extends CI_Model {
 		*/
 		$path =$this->config->item("base_server_path").'tickets/';
 		exec("openssl dgst -engine gost -verify ".$path."gost.pem -signature ".$path."signature ".$path."hashpart", $result);
-		$this->logmodel->addToLog( "SIGNATURE CHECK: ".$result[0].". ".$result[1]."\n" );
-		if ( $result[0] == "Verified OK" || $result[1] == "Verified OK" ) {
+		$this->logmodel->addToLog( "SIGNATURE CHECK: ".((isset($result[0])) ? $result[0] : "" ).". ".((isset($result[1])) ? $result[1] : "" )."\n" );
+		if ( in_array("Verified OK", $result)) {
 			return true;
 		}
 		return false;
