@@ -168,10 +168,10 @@ class Esiabridge extends CI_Controller {
 	* Return a Codeigniter View with a link
 	* 
 	* @param $cSystemID int
-	* @param $objectID int
+	* @param $ticketID int
 	* @return string|false
 	*/
-	private function requestAuthCode($cSystemID = 0, $objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
+	private function requestAuthCode($cSystemID = 0, $ticketID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
 		// Извлечение конфигурации запроса к ЕСИА и критериев фильтрации
 		$connectedSystems   = $this->config->item('CS');
 		$this->logmodel->addToLog( "AuthCode request by ".$cSystemID.".\n" );
@@ -190,7 +190,7 @@ class Esiabridge extends CI_Controller {
 			'cid'			=> $this->config->item("IS_MNEMONICS"),
 			'rurl'			=> $connectedSystems[$cSystemID]['returnURL'],
 			'client_secret'	=> $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state),
-			'redirect_uri'	=> $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$cSystemID.'/'.$objectID,
+			'redirect_uri'	=> $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$cSystemID.'/'.$ticketID,
 			'scope'			=> $this->scope,
 			'response_type'	=> 'code',
 			'state'			=> $this->state,
@@ -411,10 +411,10 @@ class Esiabridge extends CI_Controller {
 		);
 	}
 
-	private function userDeniedAccess($cSystemID, $objectID) {
+	private function userDeniedAccess($cSystemID, $ticketID) {
 		if ( $this->input->get('error') ) {
 			$errorRequest = array(
-				'ticket'      => $objectID,
+				'ticket'      => $ticketID,
 				'error'       => $this->input->get('error'),
 				'description' => $this->input->get('error_description')
 			);
@@ -430,13 +430,13 @@ class Esiabridge extends CI_Controller {
 	*
 	* @param $state string
 	* @param $cSystemID string
-	* @param $objectID int
+	* @param $ticketID int
 	* @return true|false
 	*/
 	
-	private function tokenCheckResult($state, $cSystemID, $objectID) {
+	private function tokenCheckResult($state, $cSystemID, $ticketID) {
 		$connectedSystems = $this->config->item("CS");
-		if ( !$this->verifymodel->verifyState($state) || $this->userDeniedAccess($cSystemID, $objectID) ) {
+		if ( !$this->verifymodel->verifyState($state) || $this->userDeniedAccess($cSystemID, $ticketID) ) {
 			$this->load->helper("url");
 			redirect(strstr($connectedSystems[$cSystemID]['returnURL'],"&",TRUE));
 			return false;
@@ -444,7 +444,7 @@ class Esiabridge extends CI_Controller {
 		return true;
 	}
 
-	private function processUserdata($config, $cSystemID, $objectID) {
+	private function processUserdata($config, $cSystemID, $ticketID) {
 		/* performing all requests */
 
 		foreach ($config["requests"] as $request) {
@@ -461,17 +461,17 @@ class Esiabridge extends CI_Controller {
 		}
 		return array(
 			'oid'     => $userdata['oid'],
-			'ticket'  => $objectID,
+			'ticket'  => $ticketID,
 			'data'    => json_encode($sendData),
-			'valid'   => $this->userdatamodel->processUserMatching($userdata, $objectID, $config['profile']),
+			'valid'   => $this->userdatamodel->processUserMatching($userdata, $ticketID, $config['profile']),
 			'trusted' => $userdata['trusted']
 		);
 		
 		//return true;
 	}
 
-	public function token($state = "", $cSystemID = 0, $objectID = 0 ) {
-		if ( !$this->tokenCheckResult($state, $cSystemID, $objectID) ) {
+	public function token($state = "", $cSystemID = 0, $ticketID = 0 ) {
+		if ( !$this->tokenCheckResult($state, $cSystemID, $ticketID) ) {
 			return false;
 		}
 
@@ -486,14 +486,14 @@ class Esiabridge extends CI_Controller {
 			$this->load->helper('url');
 
 			if ( $this->setToken($config['scopes']) ) {
-				$backRequest = $this->processUserdata($config, $cSystemID, $objectID);
+				$backRequest = $this->processUserdata($config, $cSystemID, $ticketID);
 				if ($backRequest) {
 					$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 					$this->logmodel->writeLog();
 				}
 
 				if ($config['profile'] === "cisco") {
-					redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$objectID);
+					redirect($connectedSystems[$cSystemID]['returnURL']."/".$userdata['oid']."/".$ticketID);
 					return true;
 				}
 				$this->sendCallbackToClient($cSystemID, $backRequest);
