@@ -2,11 +2,10 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Esiabridge extends CI_Controller {
-	/* Многие пожелания добра [Many best wishes to]:
+	/*
+	*  Многие пожелания добра [Many best wishes to]:
 	*  https://github.com/fr05t1k/esia/blob/master/src/OpenId.php
 	*  https://habrahabr.ru/post/276313/
-	*
-	*  DO: correct a signature check... 08.06.2020 Still yet to do :(
 	*/
 
 	function __construct() {
@@ -290,7 +289,6 @@ class Esiabridge extends CI_Controller {
 		}
 
 		$connectedSystems = $this->config->item('CS');
-		$url              = $connectedSystems[$cSystemID]['returnURL'];
 
 		$options = array(
 			'http' => array(
@@ -300,8 +298,8 @@ class Esiabridge extends CI_Controller {
 			)
 		);
 		$context  = stream_context_create($options);
-		$result   = file_get_contents($url, false, $context);
-		$this->logmodel->addToLog( "POST data request to: ".$url."\n".print_r($options, true)."\nHave data fun!\n" );
+		$result   = file_get_contents($connectedSystems[$cSystemID]['callbackURL'], false, $context);
+		$this->logmodel->addToLog( "POST data request to: ".$connectedSystems[$cSystemID]['callbackURL']."\n".print_r($options, true)."\nHave data fun!\n" );
 		
 		/*
 		$location = false;
@@ -312,11 +310,11 @@ class Esiabridge extends CI_Controller {
 		}
 		*/
 		if ($result === FALSE) {
-			$this->logmodel->addToLog( "Callback request to ".$url." failed! Check config.\n" );
+			$this->logmodel->addToLog( "Callback request to ".$connectedSystems[$cSystemID]['callbackURL']." failed! Check config.\n" );
 			$this->logmodel->writeLog();
 			return false;
 		}
-		//$this->logmodel->addToLog( "Sending callback request to ".$url." :: ".$location.". Have fun!\n" );
+		//$this->logmodel->addToLog( "Sending callback request to ".$connectedSystems[$cSystemID]['callbackURL']." :: ".$location.". Have fun!\n" );
 		return true;
 	}
 
@@ -358,27 +356,40 @@ class Esiabridge extends CI_Controller {
 	}
 
 	public function processticket() {
+		$state = true;
+		$error = "";
 		if (   !$this->input->post("ticket")         || !$this->input->post("data")         || !$this->input->post("systemID")
 			|| !strlen($this->input->post("ticket")) || !strlen($this->input->post("data")) || !strlen($this->input->post("systemID"))
 		) {
 			$this->logmodel->addToLog("At least one of an essential fields: POST['data'] or POST['ticket'] or POST['systemID'] is missing or empty\n");
+			$error .= "Fill POST['data'], POST['ticket'], and POST['systemID']. ";
 			$this->logmodel->writeLog("esia_ticket.log");
-			return false;
+			$state =  false;
 		}
 		$this->logmodel->addToLog("Fields OK. Processing...\n");
 
 		if ( !$this->checkClientSystem() ) {
-			return false;
+			$error .= "Client system not found. ";
+			$state =  false;
 		}
 		$ticketData = $this->parseTicketData();
 		if ( !$ticketData || !$this->writeTicket($ticketData) ) {
-			return false;
+			$error .= "Bad ticket JSON data or file could not be written. ";
+			$state = false;
 		}
-		$this->logmodel->addToLog("A ticket was processed succesfully\n");
-		print $this->requestAuthCode( $this->input->post("systemID"), $this->input->post("ticket"));
-		$this->logmodel->addToLog("Request Auth Code has passed\n");
-		$this->logmodel->writeLog("esia_ticket.log");
-		return true;
+		if ( $state ) {
+			print $this->requestAuthCode( $this->input->post("systemID"), $this->input->post("ticket"));
+			$this->logmodel->addToLog("A ticket was processed succesfully\n");
+			$this->logmodel->writeLog("esia_ticket.log");
+			/* Normally run */
+			return true;
+		}
+		$errorRequest = array(
+			'ticket'      => $ticketID,
+			'error'       => "Bad code request data",
+			'description' => $error
+		);
+		$this->sendCallbackToClient($cSystemID, $errorRequest);
 	}
 
 	private function newUserDataObject() {
@@ -471,7 +482,16 @@ class Esiabridge extends CI_Controller {
 	}
 
 	public function token($state = "", $cSystemID = 0, $ticketID = 0 ) {
+		$this->load->helper('url');
+		
 		if ( !$this->tokenCheckResult($state, $cSystemID, $ticketID) ) {
+			$errorRequest = array(
+				'ticket'      => $ticketID,
+				'error'       => "Token data check failure",
+				'description' => "Token data check failure. Token might be forged."
+			);
+			$this->sendCallbackToClient($cSystemID, $backRequest);
+			redirect($connectedSystems[$cSystemID]['returnURL']);
 			return false;
 		}
 
@@ -479,11 +499,17 @@ class Esiabridge extends CI_Controller {
 			$connectedSystems = $this->config->item('CS');
 			if (!isset($connectedSystems[$cSystemID])) {
 				$this->logmodel->addToLog( "\nClient System not found in config!\n" );
+				$errorRequest = array(
+					'ticket'      => $ticketID,
+					'error'       => "Client system not found",
+					'description' => "Client system not found just before send user data to it. Very strange..."
+				);
+				$this->sendCallbackToClient($cSystemID, $backRequest);
+				redirect($connectedSystems[$cSystemID]['returnURL']);
 				return false;
 			}
 
 			$config = $connectedSystems[$cSystemID];
-			$this->load->helper('url');
 
 			if ( $this->setToken($config['scopes']) ) {
 				$backRequest = $this->processUserdata($config, $cSystemID, $ticketID);
@@ -505,6 +531,12 @@ class Esiabridge extends CI_Controller {
 		}
 		$this->logmodel->addToLog( "Authorization Code was not provided" );
 		$this->logmodel->writeLog();
+		$errorRequest = array(
+			'ticket'      => $ticketID,
+			'error'       => "No Auth Code",
+			'description' => "Authorization Code was not provided. Please proceed with redirect"
+		);
+		$this->sendCallbackToClient($cSystemID, $backRequest);
 		redirect($connectedSystems[$cSystemID]['returnURL']);
 		return false;
 	}
